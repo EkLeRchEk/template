@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/EkLeRchEk/template/internal/database"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -29,6 +30,17 @@ func NewRepository(db DBTX, queryTimeout time.Duration) *Repository {
 		db:           db,
 		queryTimeout: queryTimeout,
 	}
+}
+
+// executor выбирает, через что выполнять SQL-запросы.
+// Если в context есть транзакция — используем её.
+// Иначе используем обычное соединение из пула.
+func (r *Repository) executor(ctx context.Context) DBTX {
+	if tx := database.TxFromContext(ctx); tx != nil {
+		return tx
+	}
+
+	return r.db
 }
 
 func (r *Repository) GetByID(ctx context.Context, id string) (Trip, error) {
@@ -61,7 +73,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (Trip, error) {
 
 	var trip Trip
 
-	err = r.db.QueryRow(ctx, query, args...).Scan(
+	err = r.executor(ctx).QueryRow(ctx, query, args...).Scan(
 		&trip.ID,
 		&trip.UserID,
 		&trip.DriverID,
@@ -125,7 +137,7 @@ func (r *Repository) Create(ctx context.Context, trip Trip) error {
 		return fmt.Errorf("build create trip query: %w", err)
 	}
 
-	if _, err := r.db.Exec(ctx, query, args...); err != nil {
+	if _, err := r.executor(ctx).Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("create trip: %w", err)
 	}
 
@@ -159,7 +171,7 @@ func (r *Repository) CreateStatusHistory(
 		return fmt.Errorf("build create status history query: %w", err)
 	}
 
-	if _, err := r.db.Exec(ctx, query, args...); err != nil {
+	if _, err := r.executor(ctx).Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("create status history: %w", err)
 	}
 
@@ -189,7 +201,7 @@ func (r *Repository) Finish(
 		return fmt.Errorf("build finish trip query: %w", err)
 	}
 
-	result, err := r.db.Exec(ctx, query, args...)
+	result, err := r.executor(ctx).Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("finish trip: %w", err)
 	}

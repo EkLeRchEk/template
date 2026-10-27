@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 
@@ -84,34 +85,76 @@ func (h *Handler) CreateTrip(
 ) {
 	_ = params // Идемпотентность относится к дополнительному заданию.
 
-	var body api.TripData
-
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeProblem(w, http.StatusBadRequest, "bad_request", "Invalid JSON")
+	// Проверяем Content-Type.
+	if r.Header.Get("Content-Type") != "application/json" {
+		writeProblem(w, http.StatusBadRequest, "invalid_request", "Expected application/json")
 		return
 	}
 
-	if body.Price < 0 ||
-		body.StartPoint.Latitude < -90 ||
-		body.StartPoint.Latitude > 90 ||
-		body.EndPoint.Latitude < -90 ||
-		body.EndPoint.Latitude > 90 ||
-		body.StartPoint.Longitude < -180 ||
-		body.StartPoint.Longitude > 180 ||
-		body.EndPoint.Longitude < -180 ||
-		body.EndPoint.Longitude > 180 {
-		writeProblem(w, http.StatusBadRequest, "bad_request", "Invalid trip data")
+	// Ограничиваем размер тела запроса.
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	type requestCoordinates struct {
+		Latitude  *float64 `json:"latitude"`
+		Longitude *float64 `json:"longitude"`
+	}
+
+	// Используем указатели, чтобы отличать отсутствующие поля от нулевых.
+	var body struct {
+		UserID     *uuid.UUID          `json:"user_id"`
+		DriverID   *uuid.UUID          `json:"driver_id"`
+		StartPoint *requestCoordinates `json:"start_point"`
+		EndPoint   *requestCoordinates `json:"end_point"`
+		Price      *int64              `json:"price"`
+	}
+
+	if err := decoder.Decode(&body); err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
+		return
+	}
+
+	// Запрещаем несколько JSON-объектов в одном запросе.
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		writeProblem(w, http.StatusBadRequest, "invalid_request", "Unexpected extra JSON")
+		return
+	}
+
+	// Проверяем обязательные поля.
+	if body.UserID == nil ||
+		body.DriverID == nil ||
+		body.StartPoint == nil ||
+		body.EndPoint == nil ||
+		body.Price == nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_request", "Missing required fields")
+		return
+	}
+
+	// Проверяем координаты и цену.
+	if body.UserID == nil ||
+		body.DriverID == nil ||
+		body.StartPoint == nil ||
+		body.EndPoint == nil ||
+		body.Price == nil ||
+		body.StartPoint.Latitude == nil ||
+		body.StartPoint.Longitude == nil ||
+		body.EndPoint.Latitude == nil ||
+		body.EndPoint.Longitude == nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_request", "Missing required fields")
 		return
 	}
 
 	input := trip.CreateTripInput{
-		UserID:         body.UserId.String(),
-		DriverID:       body.DriverId.String(),
-		StartLatitude:  body.StartPoint.Latitude,
-		StartLongitude: body.StartPoint.Longitude,
-		EndLatitude:    body.EndPoint.Latitude,
-		EndLongitude:   body.EndPoint.Longitude,
-		Price:          body.Price,
+		UserID:         body.UserID.String(),
+		DriverID:       body.DriverID.String(),
+		StartLatitude:  *body.StartPoint.Latitude,
+		StartLongitude: *body.StartPoint.Longitude,
+		EndLatitude:    *body.EndPoint.Latitude,
+		EndLongitude:   *body.EndPoint.Longitude,
+		Price:          *body.Price,
 	}
 
 	created, err := h.service.CreateTrip(r.Context(), input)
@@ -121,7 +164,7 @@ func (h *Handler) CreateTrip(
 		var pgErr *pgconn.PgError
 
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			writeProblem(w, http.StatusConflict, "active_trip_conflict", "Driver already has an active trip")
+			writeProblem(w, http.StatusConflict, "driver_busy", "Driver already has an active trip")
 			return
 		}
 
@@ -194,7 +237,9 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 // GET /ready
 func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Ping(r.Context()); err != nil {
-		writeProblem(w, http.StatusServiceUnavailable, "not_ready", "Database unavailable")
+		writeJSON(w, http.StatusServiceUnavailable, api.HealthResponse{
+			Status: api.HealthResponseStatus("not_ready"),
+		})
 		return
 	}
 
