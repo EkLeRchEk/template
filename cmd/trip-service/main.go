@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/EkLeRchEk/template/internal/config"
+	"github.com/EkLeRchEk/template/internal/container"
 	"github.com/EkLeRchEk/template/internal/database"
-	"github.com/EkLeRchEk/template/internal/httpserver"
-	"github.com/EkLeRchEk/template/internal/trip"
+	httpmiddleware "github.com/EkLeRchEk/template/internal/http/middleware"
+	"github.com/EkLeRchEk/template/internal/infra/telemetry"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
@@ -29,31 +31,106 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
+	// Создаём экспорт логов в OpenTelemetry Collector.
+	otelLogHandler, shutdownLogs, err := telemetry.InitLogs(
+		ctx,
+		"trip-service",
+	)
+	if err != nil {
+		log.Fatalf("initialize OTEL logs: %v", err)
+	}
+
+	// Настраиваем JSON-логи и OTLP-экспорт.
+	if err := telemetry.InitLogger(cfg.LogLevel, otelLogHandler); err != nil {
+		log.Fatalf("initialize logger: %v", err)
+	}
+
+	// При завершении отправляем оставшиеся логи.
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			5*time.Second,
+		)
+		defer cancel()
+
+		if err := shutdownLogs(shutdownCtx); err != nil {
+			log.Printf("shutdown logs: %v", err)
+		}
+	}()
+
+	// Инициализируем OpenTelemetry.
+	shutdownTracing, err := telemetry.InitTracing(
+		ctx,
+		"trip-service",
+	)
+	if err != nil {
+		log.Fatalf("initialize tracing: %v", err)
+	}
+
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			5*time.Second,
+		)
+		defer cancel()
+
+		if err := shutdownTracing(shutdownCtx); err != nil {
+			log.Printf("shutdown tracing: %v", err)
+		}
+	}()
+
+	// Инициализируем OpenTelemetry Metrics.
+	shutdownMetrics, err := telemetry.InitMetrics(
+		ctx,
+		"trip-service",
+	)
+	if err != nil {
+		log.Fatalf("initialize metrics: %v", err)
+	}
+
+	// При остановке отправляем оставшиеся метрики.
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			5*time.Second,
+		)
+		defer cancel()
+
+		if err := shutdownMetrics(shutdownCtx); err != nil {
+			log.Printf("shutdown metrics: %v", err)
+		}
+	}()
+
 	pool, err := database.NewPostgres(ctx, cfg.Database)
 	if err != nil {
 		log.Fatalf("connect to database: %v", err)
 	}
 	defer pool.Close()
 
-	// Репозиторий для обычных запросов к БД.
-	repo := trip.NewRepository(pool, cfg.Database.QueryTimeout)
-
-	// Менеджер транзакций.
-	txManager := database.NewTxManager(pool)
-
-	// Сервис с бизнес-логикой.
-	tripService := trip.NewService(
-		repo,
-		txManager,
+	// Собираем зависимости новой архитектуры.
+	app := container.New(
+		pool,
 		cfg.Database.QueryTimeout,
 	)
 
-	// HTTP-сервер со сгенерированными маршрутами OpenAPI.
-	handler := httpserver.New(pool, tripService)
+	// Получаем HTTP-обработчик из контейнера.
+	handler := app.HTTP.Handler()
+
+	// Создаём middleware для сбора HTTP-метрик.
+	metricsMiddleware, err := httpmiddleware.Metrics()
+	if err != nil {
+		log.Fatalf("initialize HTTP metrics: %v", err)
+	}
+
+	// Подключаем метрики ко всем HTTP-запросам.
+	handler = metricsMiddleware(handler)
+
+	// Логируем HTTP-запросы.
+	handler = httpmiddleware.Logging(handler)
 
 	server := &http.Server{
 		Addr:              cfg.HTTP.Addr,
-		Handler:           handler.Handler(),
+		Handler:           otelhttp.NewHandler(handler, "trip-service-http"),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
