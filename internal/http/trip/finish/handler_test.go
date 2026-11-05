@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
 	api "github.com/EkLeRchEk/template/internal/generated"
 	"github.com/EkLeRchEk/template/internal/model"
-	"github.com/google/uuid"
 )
 
 const testTripID = "8a8055ef-2229-4922-a576-1565fd54ce64"

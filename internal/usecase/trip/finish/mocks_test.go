@@ -14,8 +14,9 @@ import (
 	reflect "reflect"
 	time "time"
 
-	model "github.com/EkLeRchEk/template/internal/model"
 	gomock "go.uber.org/mock/gomock"
+
+	model "github.com/EkLeRchEk/template/internal/model"
 )
 
 // MocktripRepository is a mock of tripRepository interface.

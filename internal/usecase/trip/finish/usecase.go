@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
-	"github.com/EkLeRchEk/template/internal/model"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+
+	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
+	"github.com/EkLeRchEk/template/internal/model"
 )
 
 type Usecase struct {

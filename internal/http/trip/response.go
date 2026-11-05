@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	api "github.com/EkLeRchEk/template/internal/generated"
 	"github.com/EkLeRchEk/template/internal/model"
-	"github.com/google/uuid"
 )
 
 // ToAPITrip преобразует внутреннюю модель в OpenAPI-модель.

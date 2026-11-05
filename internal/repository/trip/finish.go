@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
 	sq "github.com/Masterminds/squirrel"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+
+	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
 )
 
 // Finish завершает только активную поездку.
@@ -37,7 +38,6 @@ func (r *Repository) Finish(
 		}).
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
-
 	if err != nil {
 		return fmt.Errorf("build finish trip query: %w", err)
 	}

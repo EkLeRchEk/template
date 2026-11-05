@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/mock/gomock"
+
 	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
 	"github.com/EkLeRchEk/template/internal/model"
-	"go.uber.org/mock/gomock"
 )
 
 // Создаём активную поездку для тестов.

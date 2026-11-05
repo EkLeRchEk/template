@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
-	"github.com/EkLeRchEk/template/internal/model"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+
+	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
+	"github.com/EkLeRchEk/template/internal/model"
 )
 
 // Input содержит данные для создания поездки.
@@ -85,7 +86,6 @@ func (u *Usecase) Execute(
 
 		return nil
 	})
-
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "CreateTrip failed")

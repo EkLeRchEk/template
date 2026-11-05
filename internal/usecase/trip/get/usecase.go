@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/EkLeRchEk/template/internal/model"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+
+	"github.com/EkLeRchEk/template/internal/model"
 )
 
 type Usecase struct {

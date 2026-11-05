@@ -1,4 +1,6 @@
-package database
+//go:build integration
+
+package transaction
 
 import (
 	"context"
@@ -7,11 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/EkLeRchEk/template/internal/config"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/EkLeRchEk/template/internal/config"
+	"github.com/EkLeRchEk/template/internal/infra/postgres"
 )
 
-func testPool(t *testing.T) *TxManager {
+// testPool создаёт подключение к тестовой БД
+// и менеджер транзакций.
+func testPool(t *testing.T) (*Manager, *pgxpool.Pool) {
 	t.Helper()
 
 	url := os.Getenv("DATABASE_URL")
@@ -21,7 +28,7 @@ func testPool(t *testing.T) *TxManager {
 
 	ctx := context.Background()
 
-	pool, err := NewPostgres(ctx, config.DatabaseConfig{
+	pool, err := postgres.NewPostgres(ctx, config.DatabaseConfig{
 		URL:             url,
 		MaxConns:        5,
 		MinConns:        1,
@@ -33,12 +40,13 @@ func testPool(t *testing.T) *TxManager {
 	}
 
 	t.Cleanup(pool.Close)
-	return NewTxManager(pool)
+
+	return New(pool), pool
 }
 
-// Проверяем, что ошибка приводит к ROLLBACK.
+// TestTransactionRollback проверяет откат транзакции при ошибке.
 func TestTransactionRollback(t *testing.T) {
-	manager := testPool(t)
+	manager, pool := testPool(t)
 	ctx := context.Background()
 
 	tripID := uuid.NewString()
@@ -48,7 +56,7 @@ func TestTransactionRollback(t *testing.T) {
 	testErr := errors.New("simulated failure")
 
 	err := manager.Do(ctx, func(ctx context.Context) error {
-		tx := TxFromContext(ctx)
+		tx := FromContext(ctx)
 		if tx == nil {
 			t.Fatal("transaction not found in context")
 		}
@@ -63,11 +71,11 @@ func TestTransactionRollback(t *testing.T) {
 			VALUES ($1, $2, $3, 59.9, 30.3, 59.8, 30.4,
 				1000, 'active', now())
 		`, tripID, userID, driverID)
-
 		if err != nil {
 			return err
 		}
 
+		// Имитируем ошибку после успешного INSERT.
 		return testErr
 	})
 
@@ -75,17 +83,13 @@ func TestTransactionRollback(t *testing.T) {
 		t.Fatalf("expected simulated error, got %v", err)
 	}
 
-	// Для проверки SELECT используем отдельное соединение.
-	// Сама транзакция уже завершилась.
-	pool := manager.pool
-
+	// Проверяем, что запись не сохранилась в БД.
 	var count int
 	err = pool.QueryRow(
 		context.Background(),
 		"SELECT COUNT(*) FROM trips WHERE id = $1",
 		tripID,
 	).Scan(&count)
-
 	if err != nil {
 		t.Fatalf("count trips: %v", err)
 	}
@@ -95,18 +99,19 @@ func TestTransactionRollback(t *testing.T) {
 	}
 }
 
-// Проверяем повторное использование транзакции.
+// TestNestedTransaction проверяет повторное
+// использование существующей транзакции.
 func TestNestedTransaction(t *testing.T) {
-	manager := testPool(t)
+	manager, _ := testPool(t)
 
 	err := manager.Do(context.Background(), func(ctx context.Context) error {
-		outerTx := TxFromContext(ctx)
+		outerTx := FromContext(ctx)
 		if outerTx == nil {
 			t.Fatal("outer transaction not found")
 		}
 
 		return manager.Do(ctx, func(ctx context.Context) error {
-			innerTx := TxFromContext(ctx)
+			innerTx := FromContext(ctx)
 
 			if innerTx != outerTx {
 				t.Fatal("nested transaction created a new transaction")
@@ -115,7 +120,6 @@ func TestNestedTransaction(t *testing.T) {
 			return nil
 		})
 	})
-
 	if err != nil {
 		t.Fatalf("nested transaction failed: %v", err)
 	}

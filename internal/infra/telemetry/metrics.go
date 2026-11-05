@@ -17,7 +17,6 @@ func InitMetrics(
 	ctx context.Context,
 	serviceName string,
 ) (func(context.Context) error, error) {
-
 	// Создаём экспортёр OTLP HTTP.
 	exporter, err := otlpmetrichttp.New(ctx)
 	if err != nil {

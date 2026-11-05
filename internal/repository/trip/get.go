@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
-	"github.com/EkLeRchEk/template/internal/model"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+
+	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
+	"github.com/EkLeRchEk/template/internal/model"
 )
 
 // GetByID получает поездку из PostgreSQL по идентификатору.
@@ -47,7 +48,6 @@ func (r *Repository) GetByID(
 		Where(sq.Eq{"id": id}).
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
-
 	if err != nil {
 		return model.Trip{}, fmt.Errorf("build get trip query: %w", err)
 	}
@@ -69,7 +69,6 @@ func (r *Repository) GetByID(
 		&result.CreatedAt,
 		&result.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Trip{}, domaintrip.ErrTripNotFound

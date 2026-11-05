@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/EkLeRchEk/template/internal/model"
 	sq "github.com/Masterminds/squirrel"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+
+	"github.com/EkLeRchEk/template/internal/model"
 )
 
 // CreateStatusHistory сохраняет изменение статуса поездки.
@@ -40,7 +41,6 @@ func (r *Repository) CreateStatusHistory(
 		).
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
-
 	if err != nil {
 		return fmt.Errorf("build create status history query: %w", err)
 	}

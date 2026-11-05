@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
 	api "github.com/EkLeRchEk/template/internal/generated"
 	"github.com/EkLeRchEk/template/internal/model"
-	"github.com/google/uuid"
 )
 
 type fakeUsecase struct {

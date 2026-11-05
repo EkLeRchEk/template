@@ -1,3 +1,5 @@
+//go:build integration
+
 package trip_test
 
 import (
@@ -7,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/EkLeRchEk/template/internal/infra/postgres/transaction"
 	"github.com/EkLeRchEk/template/internal/model"
 	"github.com/EkLeRchEk/template/internal/repository/trip"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestCreateRollbackIntegration(t *testing.T) {
@@ -79,7 +82,6 @@ func TestCreateRollbackIntegration(t *testing.T) {
 		"SELECT COUNT(*) FROM trips WHERE id = $1",
 		tripID,
 	).Scan(&count)
-
 	if err != nil {
 		t.Fatalf("check rollback: %v", err)
 	}

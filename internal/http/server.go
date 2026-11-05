@@ -3,12 +3,13 @@ package httpadapter
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	api "github.com/EkLeRchEk/template/internal/generated"
 	createhandler "github.com/EkLeRchEk/template/internal/http/trip/create"
 	finishhandler "github.com/EkLeRchEk/template/internal/http/trip/finish"
 	gethandler "github.com/EkLeRchEk/template/internal/http/trip/get"
-	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Server struct {

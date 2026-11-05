@@ -3,7 +3,6 @@ package telemetry
 import (
 	"context"
 	"fmt"
-
 	"log/slog"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
@@ -18,7 +17,6 @@ func InitLogs(
 	ctx context.Context,
 	serviceName string,
 ) (slog.Handler, func(context.Context) error, error) {
-
 	// Создаём OTLP HTTP экспортёр логов.
 	exporter, err := otlploghttp.New(ctx)
 	if err != nil {

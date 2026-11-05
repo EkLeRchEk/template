@@ -9,11 +9,12 @@ import (
 	"mime"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/EkLeRchEk/template/internal/http/domainerror"
 	triphttp "github.com/EkLeRchEk/template/internal/http/trip"
 	"github.com/EkLeRchEk/template/internal/model"
 	createuc "github.com/EkLeRchEk/template/internal/usecase/trip/create"
-	"github.com/google/uuid"
 )
 
 // Интерфейс описывает только нужную обработчику операцию.

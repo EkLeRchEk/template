@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
-	"github.com/EkLeRchEk/template/internal/model"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+
+	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
+	"github.com/EkLeRchEk/template/internal/model"
 )
 
 // Create сохраняет новую поездку в PostgreSQL.
@@ -54,7 +55,6 @@ func (r *Repository) Create(ctx context.Context, trip model.Trip) error {
 		).
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
-
 	if err != nil {
 		return fmt.Errorf("build create trip query: %w", err)
 	}

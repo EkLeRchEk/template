@@ -4,9 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/EkLeRchEk/template/internal/infra/postgres/transaction"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/EkLeRchEk/template/internal/infra/postgres/transaction"
 )
 
 // DBTX описывает исполнителя SQL-запросов.

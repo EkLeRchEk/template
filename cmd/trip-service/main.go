@@ -10,12 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"github.com/EkLeRchEk/template/internal/config"
 	"github.com/EkLeRchEk/template/internal/container"
-	"github.com/EkLeRchEk/template/internal/database"
 	httpmiddleware "github.com/EkLeRchEk/template/internal/http/middleware"
+	"github.com/EkLeRchEk/template/internal/infra/postgres"
 	"github.com/EkLeRchEk/template/internal/infra/telemetry"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
@@ -101,7 +102,7 @@ func main() {
 		}
 	}()
 
-	pool, err := database.NewPostgres(ctx, cfg.Database)
+	pool, err := postgres.NewPostgres(ctx, cfg.Database)
 	if err != nil {
 		log.Fatalf("connect to database: %v", err)
 	}

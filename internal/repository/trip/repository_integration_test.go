@@ -1,3 +1,5 @@
+//go:build integration
+
 package trip_test
 
 import (
@@ -8,13 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	domaintrip "github.com/EkLeRchEk/template/internal/domain/trip"
 	"github.com/EkLeRchEk/template/internal/infra/postgres/transaction"
 	"github.com/EkLeRchEk/template/internal/repository/trip"
 	createuc "github.com/EkLeRchEk/template/internal/usecase/trip/create"
 	finishuc "github.com/EkLeRchEk/template/internal/usecase/trip/finish"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestTripLifecycleIntegration(t *testing.T) {
@@ -88,7 +91,6 @@ func TestTripLifecycleIntegration(t *testing.T) {
 		FROM trip_status_history
 		WHERE trip_id = $1 AND to_status = 'active'
 	`, created.ID).Scan(&count)
-
 	if err != nil {
 		t.Fatalf("check initial history: %v", err)
 	}
@@ -117,7 +119,6 @@ func TestTripLifecycleIntegration(t *testing.T) {
 		FROM trip_status_history
 		WHERE trip_id = $1 AND to_status = 'completed'
 	`, created.ID).Scan(&count)
-
 	if err != nil {
 		t.Fatalf("check finish history: %v", err)
 	}
@@ -238,7 +239,6 @@ func TestConcurrentFinishIntegration(t *testing.T) {
 		  AND from_status = 'active'
 		  AND to_status = 'completed'
 	`, created.ID).Scan(&historyCount)
-
 	if err != nil {
 		t.Fatalf("count finish history: %v", err)
 	}

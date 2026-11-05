@@ -3,6 +3,8 @@ package container
 import (
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	httpadapter "github.com/EkLeRchEk/template/internal/http"
 	createhandler "github.com/EkLeRchEk/template/internal/http/trip/create"
 	finishhandler "github.com/EkLeRchEk/template/internal/http/trip/finish"
@@ -12,7 +14,6 @@ import (
 	createuc "github.com/EkLeRchEk/template/internal/usecase/trip/create"
 	finishuc "github.com/EkLeRchEk/template/internal/usecase/trip/finish"
 	getuc "github.com/EkLeRchEk/template/internal/usecase/trip/get"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Container собирает зависимости приложения.
