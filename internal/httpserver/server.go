@@ -19,8 +19,25 @@ func New(db *pgxpool.Pool, service *trip.Service) *Server {
 	// Создаём HTTP-обработчик с доступом к сервису и БД.
 	handler := NewHandler(service, db)
 
+	// Настраиваем обработку ошибок OpenAPI.
+	options := api.ChiServerOptions{
+		BaseRouter: router,
+		ErrorHandlerFunc: func(
+			w http.ResponseWriter,
+			r *http.Request,
+			err error,
+		) {
+			writeProblem(
+				w,
+				http.StatusBadRequest,
+				"invalid_request",
+				"Invalid request parameters",
+			)
+		},
+	}
+
 	// Регистрируем маршруты из OpenAPI.
-	api.HandlerFromMux(handler, router)
+	api.HandlerWithOptions(handler, options)
 
 	return &Server{
 		router: router,

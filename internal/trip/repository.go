@@ -12,8 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-var ErrNotFound = errors.New("trip not found")
-var ErrTripCompleted = errors.New("trip already completed")
+var (
+	ErrNotFound      = errors.New("trip not found")
+	ErrTripCompleted = errors.New("trip already completed")
+	ErrDriverBusy    = errors.New("driver already has an active trip")
+)
 
 type DBTX interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
@@ -138,6 +141,14 @@ func (r *Repository) Create(ctx context.Context, trip Trip) error {
 	}
 
 	if _, err := r.executor(ctx).Exec(ctx, query, args...); err != nil {
+		var pgErr *pgconn.PgError
+
+		if errors.As(err, &pgErr) &&
+			pgErr.Code == "23505" &&
+			pgErr.ConstraintName == "trips_driver_active_unique_idx" {
+			return fmt.Errorf("create trip: %w", ErrDriverBusy)
+		}
+
 		return fmt.Errorf("create trip: %w", err)
 	}
 

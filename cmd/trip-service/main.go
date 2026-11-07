@@ -33,7 +33,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("connect to database: %v", err)
 	}
-	defer pool.Close()
 
 	// Репозиторий для обычных запросов к БД.
 	repo := trip.NewRepository(pool, cfg.Database.QueryTimeout)
@@ -73,14 +72,37 @@ func main() {
 
 	log.Println("shutting down server")
 
+	// Общий таймаут завершения приложения.
 	shutdownCtx, cancel := context.WithTimeout(
 		context.Background(),
 		cfg.HTTP.ShutdownTimeout,
 	)
 	defer cancel()
 
+	// Останавливаем HTTP-сервер.
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("HTTP server shutdown: %v", err)
+
+		if closeErr := server.Close(); closeErr != nil {
+			log.Printf("HTTP server force close: %v", closeErr)
+		}
+	}
+
+	// Закрываем пул PostgreSQL.
+	poolClosed := make(chan struct{})
+
+	go func() {
+		pool.Close()
+		close(poolClosed)
+	}()
+
+	// Ожидаем закрытия пула в пределах общего таймаута.
+	select {
+	case <-poolClosed:
+		log.Println("database pool closed")
+
+	case <-shutdownCtx.Done():
+		log.Printf("database pool shutdown timeout: %v", shutdownCtx.Err())
 	}
 
 	log.Println("server stopped")

@@ -1,17 +1,19 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
+	"time"
 
 	api "github.com/EkLeRchEk/template/internal/generated"
 	"github.com/EkLeRchEk/template/internal/trip"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -34,6 +36,18 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
+}
+
+// Проверяет допустимость географических координат.
+func validCoordinates(latitude, longitude float64) bool {
+	return !math.IsNaN(latitude) &&
+		!math.IsNaN(longitude) &&
+		!math.IsInf(latitude, 0) &&
+		!math.IsInf(longitude, 0) &&
+		latitude >= -90 &&
+		latitude <= 90 &&
+		longitude >= -180 &&
+		longitude <= 180
 }
 
 // Ошибки в формате Problem Details.
@@ -133,17 +147,45 @@ func (h *Handler) CreateTrip(
 		return
 	}
 
-	// Проверяем координаты и цену.
-	if body.UserID == nil ||
-		body.DriverID == nil ||
-		body.StartPoint == nil ||
-		body.EndPoint == nil ||
-		body.Price == nil ||
-		body.StartPoint.Latitude == nil ||
+	// Проверяем наличие координат.
+	if body.StartPoint.Latitude == nil ||
 		body.StartPoint.Longitude == nil ||
 		body.EndPoint.Latitude == nil ||
 		body.EndPoint.Longitude == nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_request", "Missing required fields")
+		writeProblem(
+			w,
+			http.StatusBadRequest,
+			"invalid_request",
+			"Missing required coordinates",
+		)
+		return
+	}
+
+	// Проверяем цену.
+	if *body.Price < 0 {
+		writeProblem(
+			w,
+			http.StatusBadRequest,
+			"invalid_request",
+			"Price cannot be negative",
+		)
+		return
+	}
+
+	// Проверяем допустимость координат.
+	if !validCoordinates(
+		*body.StartPoint.Latitude,
+		*body.StartPoint.Longitude,
+	) || !validCoordinates(
+		*body.EndPoint.Latitude,
+		*body.EndPoint.Longitude,
+	) {
+		writeProblem(
+			w,
+			http.StatusBadRequest,
+			"invalid_request",
+			"Invalid coordinates",
+		)
 		return
 	}
 
@@ -159,16 +201,24 @@ func (h *Handler) CreateTrip(
 
 	created, err := h.service.CreateTrip(r.Context(), input)
 	if err != nil {
-		log.Printf("CreateTrip failed: %+v", err)
-
-		var pgErr *pgconn.PgError
-
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			writeProblem(w, http.StatusConflict, "driver_busy", "Driver already has an active trip")
+		if errors.Is(err, trip.ErrDriverBusy) {
+			writeProblem(
+				w,
+				http.StatusConflict,
+				"driver_busy",
+				"Driver already has an active trip",
+			)
 			return
 		}
 
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		log.Printf("CreateTrip failed: %+v", err)
+
+		writeProblem(
+			w,
+			http.StatusInternalServerError,
+			"internal_error",
+			"Internal server error",
+		)
 		return
 	}
 
@@ -236,9 +286,12 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 
 // GET /ready
 func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
-	if err := h.db.Ping(r.Context()); err != nil {
+	ctx, cancel := context.WithTimeout(r.Context(), 500*time.Millisecond)
+	defer cancel()
+
+	if err := h.db.Ping(ctx); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, api.HealthResponse{
-			Status: api.HealthResponseStatus("not_ready"),
+			Status: api.HealthResponseStatus("unavailable"),
 		})
 		return
 	}
