@@ -6,3 +6,7 @@
 bin/
 
 .DS_Store
+
+# Go test coverage reports
+coverage.out
+coverage-integration.out
