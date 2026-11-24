@@ -4,10 +4,14 @@
 -include .env
 export
 
+# Генерация OpenAPI и GoMock с последующим форматированием
 generate:
 	go tool oapi-codegen \
 		-config internal/config/oapi-codegen.yaml \
 		contracts/openapi/trip-service.openapi.yaml
+	go generate ./internal/usecase/trip/...
+	gofumpt -w ./internal/generated ./internal/usecase/trip
+	gci write -s standard -s default -s "prefix(github.com/EkLeRchEk/template)" ./internal/generated ./internal/usecase/trip
 
 migrate:
 	go tool goose -dir migrations postgres "$(DATABASE_URL)" up

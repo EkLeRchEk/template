@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/EkLeRchEk/template/internal/infra/postgres/transaction"
@@ -23,7 +24,10 @@ func TestCreateRollbackIntegration(t *testing.T) {
 		t.Skip("DATABASE_URL is not set")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		15*time.Second,
+	)
 	defer cancel()
 
 	pool, err := pgxpool.New(ctx, databaseURL)
@@ -40,53 +44,87 @@ func TestCreateRollbackIntegration(t *testing.T) {
 	txManager := transaction.New(pool)
 
 	tripID := uuid.NewString()
-	driverID := uuid.NewString()
-	userID := uuid.NewString()
-
-	now := time.Now().UTC()
 
 	newTrip := model.Trip{
 		ID:             tripID,
-		UserID:         userID,
-		DriverID:       driverID,
+		UserID:         uuid.NewString(),
+		DriverID:       uuid.NewString(),
 		StartLatitude:  59.9398,
 		StartLongitude: 30.3146,
 		EndLatitude:    59.929,
 		EndLongitude:   30.3626,
 		Price:          1450,
 		Status:         "active",
-		StartedAt:      now,
+		StartedAt:      time.Now().UTC(),
 	}
 
-	expectedErr := errors.New("simulated history failure")
-
+	// Обе вставки выполняются в одной транзакции.
 	err = txManager.Do(ctx, func(ctx context.Context) error {
-		// Первая операция должна выполниться успешно.
+		// Первая вставка: успешно создаём поездку.
 		if err := repo.Create(ctx, newTrip); err != nil {
 			return err
 		}
 
-		// Имитируем ошибку, которая произошла бы
-		// при сохранении истории.
-		return expectedErr
+		// Проверяем, что поездка видна внутри транзакции.
+		if _, err := repo.GetByID(ctx, tripID); err != nil {
+			return err
+		}
+
+		// Вторая вставка: реальный SQL-запрос.
+		// PostgreSQL отклонит invalid_status,
+		// поскольку CHECK разрешает только active/completed.
+		return repo.CreateStatusHistory(ctx, model.StatusHistory{
+			TripID:   tripID,
+			ToStatus: "invalid_status",
+		})
 	})
 
-	if !errors.Is(err, expectedErr) {
-		t.Fatalf("expected simulated error, got %v", err)
+	// Ошибка обязательно должна прийти от PostgreSQL.
+	if err == nil {
+		t.Fatal("expected database error, got nil")
 	}
 
-	// После ROLLBACK поездки не должно быть в БД.
-	var count int
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		t.Fatalf("expected PostgreSQL error, got %v", err)
+	}
 
-	err = pool.QueryRow(ctx,
+	// 23514 = check_violation.
+	if pgErr.Code != "23514" {
+		t.Fatalf("expected SQLSTATE 23514, got %s", pgErr.Code)
+	}
+
+	// Проверяем первую таблицу.
+	// После ROLLBACK поездка должна отсутствовать.
+	var tripCount int
+
+	err = pool.QueryRow(
+		ctx,
 		"SELECT COUNT(*) FROM trips WHERE id = $1",
 		tripID,
-	).Scan(&count)
+	).Scan(&tripCount)
 	if err != nil {
-		t.Fatalf("check rollback: %v", err)
+		t.Fatalf("check trips: %v", err)
 	}
 
-	if count != 0 {
-		t.Fatalf("rollback failed: trip still exists")
+	if tripCount != 0 {
+		t.Fatalf("rollback failed: found %d trips", tripCount)
+	}
+
+	// Проверяем вторую таблицу.
+	// Записей истории тоже быть не должно.
+	var historyCount int
+
+	err = pool.QueryRow(
+		ctx,
+		"SELECT COUNT(*) FROM trip_status_history WHERE trip_id = $1",
+		tripID,
+	).Scan(&historyCount)
+	if err != nil {
+		t.Fatalf("check trip status history: %v", err)
+	}
+
+	if historyCount != 0 {
+		t.Fatalf("rollback failed: found %d history records", historyCount)
 	}
 }

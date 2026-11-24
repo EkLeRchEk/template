@@ -35,9 +35,9 @@ func performRequest(uc fakeUsecase) *httptest.ResponseRecorder {
 	)
 
 	rec := httptest.NewRecorder()
-	id := api.TripId(uuid.MustParse(
+	id := uuid.MustParse(
 		"8a8055ef-2229-4922-a576-1565fd54ce64",
-	))
+	)
 
 	New(uc).Handle(rec, req, id)
 

@@ -1,6 +1,7 @@
 package container
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,14 +42,15 @@ func New(
 	finishHandler := finishhandler.New(finishUsecase)
 
 	// HTTP-сервер.
-	server := httpadapter.New(
+	httpServer := httpadapter.New(
 		pool,
+		slog.Default(),
 		createHandler,
 		getHandler,
 		finishHandler,
 	)
 
 	return &Container{
-		HTTP: server,
+		HTTP: httpServer,
 	}
 }

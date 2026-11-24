@@ -29,7 +29,8 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		log.Printf("load config: %v", err)
+		return
 	}
 
 	// Создаём экспорт логов в OpenTelemetry Collector.
@@ -38,12 +39,8 @@ func main() {
 		"trip-service",
 	)
 	if err != nil {
-		log.Fatalf("initialize OTEL logs: %v", err)
-	}
-
-	// Настраиваем JSON-логи и OTLP-экспорт.
-	if err := telemetry.InitLogger(cfg.LogLevel, otelLogHandler); err != nil {
-		log.Fatalf("initialize logger: %v", err)
+		log.Printf("initialize OTEL logs: %v", err)
+		return
 	}
 
 	// При завершении отправляем оставшиеся логи.
@@ -59,13 +56,20 @@ func main() {
 		}
 	}()
 
-	// Инициализируем OpenTelemetry.
+	// Настраиваем JSON-логи и OTLP-экспорт.
+	if err := telemetry.InitLogger(cfg.LogLevel, otelLogHandler); err != nil {
+		log.Printf("initialize logger: %v", err)
+		return
+	}
+
+	// Инициализируем OpenTelemetry Tracing.
 	shutdownTracing, err := telemetry.InitTracing(
 		ctx,
 		"trip-service",
 	)
 	if err != nil {
-		log.Fatalf("initialize tracing: %v", err)
+		log.Printf("initialize tracing: %v", err)
+		return
 	}
 
 	defer func() {
@@ -86,7 +90,8 @@ func main() {
 		"trip-service",
 	)
 	if err != nil {
-		log.Fatalf("initialize metrics: %v", err)
+		log.Printf("initialize metrics: %v", err)
+		return
 	}
 
 	// При остановке отправляем оставшиеся метрики.
@@ -102,9 +107,11 @@ func main() {
 		}
 	}()
 
+	// Подключаемся к PostgreSQL.
 	pool, err := postgres.NewPostgres(ctx, cfg.Database)
 	if err != nil {
-		log.Fatalf("connect to database: %v", err)
+		log.Printf("connect to database: %v", err)
+		return
 	}
 	defer pool.Close()
 
@@ -114,16 +121,16 @@ func main() {
 		cfg.Database.QueryTimeout,
 	)
 
-	// Получаем HTTP-обработчик из контейнера.
+	// Получаем HTTP-обработчик.
 	handler := app.HTTP.Handler()
 
 	// Создаём middleware для сбора HTTP-метрик.
 	metricsMiddleware, err := httpmiddleware.Metrics()
 	if err != nil {
-		log.Fatalf("initialize HTTP metrics: %v", err)
+		log.Printf("initialize HTTP metrics: %v", err)
+		return
 	}
 
-	// Подключаем метрики ко всем HTTP-запросам.
 	handler = metricsMiddleware(handler)
 
 	// Логируем HTTP-запросы.
@@ -138,15 +145,18 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
+	// Запускаем HTTP-сервер.
 	go func() {
 		log.Printf("HTTP server listening on %s", cfg.HTTP.Addr)
 
 		if err := server.ListenAndServe(); err != nil &&
 			!errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("HTTP server: %v", err)
+			log.Printf("HTTP server: %v", err)
+			stop()
 		}
 	}()
 
+	// Ожидаем сигнал завершения.
 	<-ctx.Done()
 
 	log.Println("shutting down server")

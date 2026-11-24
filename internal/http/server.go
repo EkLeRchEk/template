@@ -1,30 +1,40 @@
 package httpadapter
 
 import (
+	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	api "github.com/EkLeRchEk/template/internal/generated"
+	"github.com/EkLeRchEk/template/internal/http/domainerror"
 	createhandler "github.com/EkLeRchEk/template/internal/http/trip/create"
 	finishhandler "github.com/EkLeRchEk/template/internal/http/trip/finish"
 	gethandler "github.com/EkLeRchEk/template/internal/http/trip/get"
 )
+
+// DBPinger описывает зависимость, необходимую для проверки БД.
+type DBPinger interface {
+	Ping(ctx context.Context) error
+}
 
 type Server struct {
 	router *chi.Mux
 	create *createhandler.Handler
 	get    *gethandler.Handler
 	finish *finishhandler.Handler
-	db     *pgxpool.Pool
+	db     DBPinger
+	logger *slog.Logger
 }
 
 // Проверяем на этапе компиляции реализацию OpenAPI-интерфейса.
 var _ api.ServerInterface = (*Server)(nil)
 
 func New(
-	db *pgxpool.Pool,
+	db DBPinger,
+	logger *slog.Logger,
 	create *createhandler.Handler,
 	get *gethandler.Handler,
 	finish *finishhandler.Handler,
@@ -35,9 +45,31 @@ func New(
 		get:    get,
 		finish: finish,
 		db:     db,
+		logger: logger,
 	}
 
-	api.HandlerFromMux(s, s.router)
+	api.HandlerWithOptions(s, api.ChiServerOptions{
+		BaseRouter: s.router,
+		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			var invalidParam *api.InvalidParamFormatError
+
+			if errors.As(err, &invalidParam) {
+				s.logger.WarnContext(
+					r.Context(),
+					"invalid request parameter",
+					"parameter", invalidParam.ParamName,
+					"error", err,
+				)
+			}
+
+			domainerror.WriteProblem(
+				w,
+				http.StatusBadRequest,
+				"invalid_request",
+				"Invalid request parameters",
+			)
+		},
+	})
 
 	return s
 }
@@ -81,11 +113,19 @@ func (s *Server) Health(w http.ResponseWriter, _ *http.Request) {
 }
 
 // GET /ready
+
+// Ready проверяет доступность PostgreSQL.
 func (s *Server) Ready(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.Ping(r.Context()); err != nil {
+		s.logger.ErrorContext(
+			r.Context(),
+			"database readiness check failed",
+			"error", err,
+		)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"status":"not_ready"}`))
+		_, _ = w.Write([]byte(`{"status":"unavailable"}`))
 		return
 	}
 

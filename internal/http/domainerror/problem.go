@@ -9,20 +9,19 @@ import (
 	api "github.com/EkLeRchEk/template/internal/generated"
 )
 
-// WriteProblem отправляет ошибку в формате Problem Details.
 func WriteProblem(
 	w http.ResponseWriter,
-	status int,
+	status int32,
 	code string,
 	title string,
 ) {
 	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
+	w.WriteHeader(int(status))
 
 	_ = json.NewEncoder(w).Encode(api.Problem{
 		Type:   "about:blank",
 		Title:  title,
-		Status: int32(status),
+		Status: status,
 		Code:   code,
 	})
 }

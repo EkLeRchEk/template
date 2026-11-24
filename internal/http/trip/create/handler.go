@@ -112,7 +112,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Проверяем диапазоны координат.
-	validCoordinate := func(value float64, min, max float64) bool {
+	validCoordinate := func(value, min, max float64) bool {
 		return !math.IsNaN(value) &&
 			!math.IsInf(value, 0) &&
 			value >= min &&
