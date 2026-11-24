@@ -8,9 +8,10 @@ import (
 )
 
 type Config struct {
-	HTTP     HTTPConfig
-	Database DatabaseConfig
-	LogLevel string
+	HTTP      HTTPConfig
+	Database  DatabaseConfig
+	Positions PositionConfig
+	LogLevel  string
 }
 
 type HTTPConfig struct {
@@ -25,6 +26,15 @@ type DatabaseConfig struct {
 	MaxConnLifetime time.Duration
 	ConnectTimeout  time.Duration
 	QueryTimeout    time.Duration
+}
+
+type PositionConfig struct {
+	CheckInterval      time.Duration
+	StaleAfter         time.Duration
+	Workers            int
+	QueueSize          int
+	PushHTTPURL        string
+	PushRequestTimeout time.Duration
 }
 
 func Load() (Config, error) {
@@ -73,6 +83,50 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	checkInterval, err := optionalDurationEnv(
+		"POSITION_CHECK_INTERVAL", "30s",
+	)
+	if err != nil {
+		return Config{}, err
+	}
+
+	staleAfter, err := optionalDurationEnv(
+		"POSITION_STALE_AFTER", "60s",
+	)
+	if err != nil {
+		return Config{}, err
+	}
+
+	workers, err := optionalIntEnv("POSITION_WORKERS", 4)
+	if err != nil {
+		return Config{}, err
+	}
+
+	queueSize, err := optionalIntEnv("POSITION_QUEUE_SIZE", 100)
+	if err != nil {
+		return Config{}, err
+	}
+
+	pushURL, err := requiredEnv("PUSH_HTTP_URL")
+	if err != nil {
+		return Config{}, err
+	}
+
+	pushTimeout, err := optionalDurationEnv(
+		"PUSH_REQUEST_TIMEOUT", "1s",
+	)
+	if err != nil {
+		return Config{}, err
+	}
+
+	if checkInterval <= 0 || staleAfter <= 0 || pushTimeout <= 0 {
+		return Config{}, fmt.Errorf("position durations must be positive")
+	}
+
+	if workers <= 0 || queueSize <= 0 {
+		return Config{}, fmt.Errorf("position workers and queue size must be positive")
+	}
+
 	return Config{
 		HTTP: HTTPConfig{
 			Addr:            httpAddr,
@@ -86,6 +140,14 @@ func Load() (Config, error) {
 			ConnectTimeout:  connectTimeout,
 			QueryTimeout:    queryTimeout,
 		},
+		Positions: PositionConfig{
+			CheckInterval:      checkInterval,
+			StaleAfter:         staleAfter,
+			Workers:            workers,
+			QueueSize:          queueSize,
+			PushHTTPURL:        pushURL,
+			PushRequestTimeout: pushTimeout,
+		},
 		LogLevel: logLevel,
 	}, nil
 }
@@ -93,7 +155,9 @@ func Load() (Config, error) {
 func requiredEnv(name string) (string, error) {
 	value := os.Getenv(name)
 	if value == "" {
-		return "", fmt.Errorf("required environment variable %s is not set", name)
+		return "", fmt.Errorf(
+			"required environment variable %s is not set", name,
+		)
 	}
 
 	return value, nil
@@ -103,6 +167,20 @@ func durationEnv(name string) (time.Duration, error) {
 	value, err := requiredEnv(name)
 	if err != nil {
 		return 0, err
+	}
+
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", name, err)
+	}
+
+	return duration, nil
+}
+
+func optionalDurationEnv(name, fallback string) (time.Duration, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		value = fallback
 	}
 
 	duration, err := time.ParseDuration(value)
@@ -125,4 +203,18 @@ func int32Env(name string) (int32, error) {
 	}
 
 	return int32(number), nil
+}
+
+func optionalIntEnv(name string, fallback int) (int, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback, nil
+	}
+
+	number, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", name, err)
+	}
+
+	return number, nil
 }

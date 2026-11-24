@@ -13,6 +13,8 @@ import (
 	createhandler "github.com/EkLeRchEk/template/internal/http/trip/create"
 	finishhandler "github.com/EkLeRchEk/template/internal/http/trip/finish"
 	gethandler "github.com/EkLeRchEk/template/internal/http/trip/get"
+	createpositionhandler "github.com/EkLeRchEk/template/internal/http/trip/positions/create"
+	listpositionhandler "github.com/EkLeRchEk/template/internal/http/trip/positions/list"
 )
 
 // DBPinger описывает зависимость, необходимую для проверки БД.
@@ -21,12 +23,14 @@ type DBPinger interface {
 }
 
 type Server struct {
-	router *chi.Mux
-	create *createhandler.Handler
-	get    *gethandler.Handler
-	finish *finishhandler.Handler
-	db     DBPinger
-	logger *slog.Logger
+	router         *chi.Mux
+	create         *createhandler.Handler
+	get            *gethandler.Handler
+	finish         *finishhandler.Handler
+	db             DBPinger
+	logger         *slog.Logger
+	createPosition *createpositionhandler.Handler
+	listPositions  *listpositionhandler.Handler
 }
 
 // Проверяем на этапе компиляции реализацию OpenAPI-интерфейса.
@@ -38,14 +42,18 @@ func New(
 	create *createhandler.Handler,
 	get *gethandler.Handler,
 	finish *finishhandler.Handler,
+	createPosition *createpositionhandler.Handler,
+	listPositions *listpositionhandler.Handler,
 ) *Server {
 	s := &Server{
-		router: chi.NewRouter(),
-		create: create,
-		get:    get,
-		finish: finish,
-		db:     db,
-		logger: logger,
+		router:         chi.NewRouter(),
+		create:         create,
+		get:            get,
+		finish:         finish,
+		db:             db,
+		logger:         logger,
+		createPosition: createPosition,
+		listPositions:  listPositions,
 	}
 
 	api.HandlerWithOptions(s, api.ChiServerOptions{
@@ -132,4 +140,22 @@ func (s *Server) Ready(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+// POST /api/v1/trips/{tripId}/positions
+func (s *Server) CreateTripPosition(
+	w http.ResponseWriter,
+	r *http.Request,
+	tripID api.TripId,
+) {
+	s.createPosition.Handle(w, r, tripID)
+}
+
+// GET /api/v1/trips/{tripId}/positions
+func (s *Server) ListTripPositions(
+	w http.ResponseWriter,
+	r *http.Request,
+	tripID api.TripId,
+) {
+	s.listPositions.Handle(w, r, tripID)
 }

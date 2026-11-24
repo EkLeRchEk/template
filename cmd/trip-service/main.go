@@ -17,6 +17,7 @@ import (
 	httpmiddleware "github.com/EkLeRchEk/template/internal/http/middleware"
 	"github.com/EkLeRchEk/template/internal/infra/postgres"
 	"github.com/EkLeRchEk/template/internal/infra/telemetry"
+	positionworker "github.com/EkLeRchEk/template/internal/worker/positions"
 )
 
 func main() {
@@ -116,10 +117,22 @@ func main() {
 	defer pool.Close()
 
 	// Собираем зависимости новой архитектуры.
-	app := container.New(
+	app, err := container.New(
 		pool,
 		cfg.Database.QueryTimeout,
+		positionworker.Config{
+			CheckInterval:      cfg.Positions.CheckInterval,
+			StaleAfter:         cfg.Positions.StaleAfter,
+			Workers:            cfg.Positions.Workers,
+			QueueSize:          cfg.Positions.QueueSize,
+			PushRequestTimeout: cfg.Positions.PushRequestTimeout,
+		},
+		cfg.Positions.PushHTTPURL,
 	)
+	if err != nil {
+		log.Printf("initialize application: %v", err)
+		return
+	}
 
 	// Получаем HTTP-обработчик.
 	handler := app.HTTP.Handler()
@@ -130,6 +143,9 @@ func main() {
 		log.Printf("initialize HTTP metrics: %v", err)
 		return
 	}
+
+	// Worker Pool останавливается после завершения HTTP-сервера.
+	app.Start(context.Background())
 
 	handler = metricsMiddleware(handler)
 
@@ -169,6 +185,12 @@ func main() {
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("HTTP server shutdown: %v", err)
+		_ = server.Close()
+	}
+
+	// Worker Pool останавливается после HTTP-сервера.
+	if err := app.Stop(shutdownCtx); err != nil {
+		log.Printf("position worker shutdown: %v", err)
 	}
 
 	log.Println("server stopped")

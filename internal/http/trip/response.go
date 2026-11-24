@@ -40,3 +40,16 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 	_ = json.NewEncoder(w).Encode(data)
 }
+
+// ToAPITripPosition преобразует координату во внешнюю API-модель.
+func ToAPITripPosition(position model.TripPosition) api.TripPosition {
+	return api.TripPosition{
+		Id:     position.ID,
+		TripId: uuid.MustParse(position.TripID),
+		Coordinates: api.Coordinates{
+			Latitude:  position.Latitude,
+			Longitude: position.Longitude,
+		},
+		RecordedAt: position.RecordedAt,
+	}
+}

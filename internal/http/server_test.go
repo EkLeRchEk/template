@@ -79,7 +79,7 @@ func TestReadyDatabaseUnavailable(t *testing.T) {
 func TestGetTripInvalidUUID(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	server := New(&fakeDB{}, logger, nil, nil, nil)
+	server := New(&fakeDB{}, logger, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -103,7 +103,7 @@ func TestGetTripInvalidUUID(t *testing.T) {
 func TestFinishTripInvalidUUID(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	server := New(&fakeDB{}, logger, nil, nil, nil)
+	server := New(&fakeDB{}, logger, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(
 		http.MethodPost,

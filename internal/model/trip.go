@@ -40,6 +40,15 @@ type StatusHistory struct {
 	ChangedAt time.Time
 }
 
+// TripPosition — координата, сохранённая во время поездки.
+type TripPosition struct {
+	ID         int64
+	TripID     string
+	Latitude   float64
+	Longitude  float64
+	RecordedAt time.Time
+}
+
 // ToDomain преобразует модель поездки в доменный объект.
 func (t Trip) ToDomain() domaintrip.Trip {
 	return domaintrip.Trip{
@@ -48,4 +57,11 @@ func (t Trip) ToDomain() domaintrip.Trip {
 		StartedAt:  t.StartedAt,
 		FinishedAt: t.FinishedAt,
 	}
+}
+
+// StaleTrip — поездка, для которой давно не поступали координаты.
+type StaleTrip struct {
+	ID         string
+	DriverID   string
+	StaleSince time.Time
 }
